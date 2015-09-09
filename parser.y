@@ -6,10 +6,19 @@
 #define ID_SIZE 100
 #define MAX_CHILDREN 3
 #define STATEMENT 201
+struct entry{
+    char *key;
+    float value;
+};
 int yywrap( );
 void yyerror(const char* str);
+
 struct Node* make_node(int type, double value, char* id);
 void attach_node(struct Node* parent, struct Node* child);
+void addVar(struct entry table[1000],char *var,float value);
+void eval_stmt(struct Node* node,struct entry hashtable[1000]);
+float eval_expr(struct Node* node,struct entry hashtable[1000]);
+float getVar(struct entry hashtable[1000],char *name);
 
 struct Node* tree;
 /* a tree node definition */
@@ -42,6 +51,9 @@ struct Node {
 %token INPUT 127
 %token <str> IDENTIFIER 100
 %token <val> VALUE 101
+
+%right THEN
+%right ELSE
 
 %left OR 113
 %left AND 112
@@ -103,17 +115,17 @@ assignmentStmt: IDENTIFIER ASSIGNMENT expr ENDLINE {
 		    attach_node($$,temp);
 		    attach_node($$,$3);
 		}
-ifStmt: IF expr THEN stmt {
-	    $$=make_node(IF,0,"");
-	    attach_node($$,$2);
-	    attach_node($$,$4);
-	}
 ifElseStmt: IF expr THEN stmt ELSE stmt {
 		$$=make_node(IF,0,"");
 		attach_node($$,$2);
 		attach_node($$,$4);
 		attach_node($$,$6);
 	    }
+ifStmt: IF expr THEN stmt {
+	    $$=make_node(IF,0,"");
+	    attach_node($$,$2);
+	    attach_node($$,$4);
+	}
 whileStmt: WHILE expr DO stmt {
 	       $$=make_node(WHILE,0,"");
 	       attach_node($$,$2);
@@ -301,17 +313,192 @@ void yyerror(const char* str) {
   fprintf(stderr, "Compiler error: '%s'.\n", str);
 }
 
+void eval_stmt(struct Node* node,struct entry hashtable[1000]){
+    int i;
+    if(!node){
+	printf("Base case");
+	return;
+    }
+    
+    switch(node->type) {
+	case ASSIGNMENT:
+		  addVar(hashtable,node->children[0]->id,eval_expr(node->children[1],hashtable));
+		  break;
+	case IF:
+		if((int)eval_expr(node->children[0],hashtable)){
+			eval_stmt(node->children[1],hashtable);
+		    } else if (node->num_children>2){//check for else
+			eval_stmt(node->children[2],hashtable);
+		    }
+		break;
+	case WHILE:
+		 while((int)eval_expr(node->children[0],hashtable)){
+		     eval_stmt(node->children[1],hashtable);
+		    }
+		 break;
+	case PRINT: printf("%f\n",eval_expr(node->children[0],hashtable)); break;
+	case STATEMENT:
+	    for (i=0;i<node->num_children;i++){
+		eval_stmt(node->children[i],hashtable);
+	    }
+	    break;
+	default:
+	    printf("Error, %d not a valid node type.\n", node->type);
+	    exit(1);
+    }
+}
+
+float eval_expr(struct Node* node,struct entry hashtable[1000]){
+    float input;
+    switch(node->type){
+	case INPUT: 
+	    scanf("%f",&input);
+	    //printf("Inpute: %f",input);
+	    return input;
+	    break;
+	case IDENTIFIER:
+	    //printf("Node ID: %s",node->id);
+	    return getVar(hashtable,node->id);
+	    break;
+	case VALUE: return node->value; break;
+	case PLUS:
+		    return (eval_expr(node->children[0],hashtable)+eval_expr(node->children[1],hashtable));
+		    break;
+	case MINUS:
+		    return (eval_expr(node->children[0],hashtable)-eval_expr(node->children[1],hashtable));
+		    break;
+	case SLASH:
+		    return (eval_expr(node->children[0],hashtable)/eval_expr(node->children[1],hashtable));
+		    break;
+	case STAR: 
+		    return (eval_expr(node->children[0],hashtable)*eval_expr(node->children[1],hashtable));
+		    break;
+	case LESS: 
+		    if(eval_expr(node->children[0],hashtable)<eval_expr(node->children[1],hashtable))
+			return 1;
+		    else
+			return 0;
+		    break;
+	case GREAT:
+		    if(eval_expr(node->children[0],hashtable)>eval_expr(node->children[1],hashtable))
+			return 1;
+		    else
+			return 0;
+		    break;
+	case LESSEQUAL:
+		    if(eval_expr(node->children[0],hashtable)<=eval_expr(node->children[1],hashtable))
+			return 1;
+		    else
+			return 0;
+		    break;
+	case GREATEQUAL:
+		    if (eval_expr(node->children[0],hashtable)>=eval_expr(node->children[1],hashtable))
+			return 1;
+		    else
+			return 0;
+		    break;
+	case EQUAL:
+		    if (eval_expr(node->children[0],hashtable)==eval_expr(node->children[1],hashtable))
+			return 1;
+		    else
+			return 0;
+		    break;
+	case NOTEQUAL:
+		    if(eval_expr(node->children[0],hashtable)!=eval_expr(node->children[1],hashtable))
+			return 1;
+		    else
+			return 0;
+		    break;
+	case AND:
+		    if(eval_expr(node->children[0],hashtable)&&eval_expr(node->children[1],hashtable))
+			return 1;
+		    else
+			return 0;
+		    break;
+	case OR:
+		    if(eval_expr(node->children[0],hashtable)||eval_expr(node->children[1],hashtable))
+			return 1;
+		    else
+			return 0;
+		    break;
+	case NOT:if((int)eval_expr(node->children[0],hashtable)==0)
+			return 1;
+		    else
+			return 0;
+		    break;
+	default:
+	      printf("Error, %d not a valid node type/expression.\n",node->type);
+	      exit(1);
+    }
+}
+
+
+int hash_function(struct entry table[1000],char *varName){
+    int hash=((varName[0]*26)+varName[1]+varName[2])%1000;
+    while ((table[hash].key!=NULL)&&(strcmp(table[hash].key,varName))){
+	//printf("%d %d\n",table[hash].key!=NULL,table[hash].key!=varName);
+	//printf("Keys: Passed: \"%s\" Found: \"%s\"",varName,table[hash].key);
+	hash=((hash+1)%1000);
+    }
+    //printf("Hash: %d\n",hash);
+    return hash;
+}
+void addVar(struct entry table[1000],char *var,float value){
+    int index = hash_function(table,var);
+    table[index].key=var;
+    table[index].value=value;
+    //printf("Var: %s added with Value: %f\n", var,value);
+}
+float getVar(struct entry table[1000],char *var){
+    int index = hash_function(table,var);
+    //printf("Var: %s, Value: %f\n",var,table[index].value);
+    return table[index].value;
+}
 int main(int argc, char *argv[]) {
     if(argc<2){
 	printf("error: pass sloth source");
 	return 0;
     }
+    FILE* orig_stdin=stdin;
     stdin = fopen(argv[1],"r");
     if(stdin==NULL){
 	printf("Error: file does not exist\n");
 	return 0;
     }
     yyparse();
-    print_tree(tree,1);
+    //print_tree(tree,1);
+
+    fclose(stdin);
+    stdin=orig_stdin;
+
+    struct entry hashtable[1000];//should've just used a global var
+    int i;
+    for (i=0;i<1000;i++){
+	//printf("%d",i);
+	hashtable[i].key=NULL;
+	hashtable[i].value=0;
+    }
+    /*
+    addVar(hashtable,"x",1);
+    addVar(hashtable,"y",2);
+    addVar(hashtable,"a",3);
+    addVar(hashtable,"b",4);
+    addVar(hashtable,"temp",5);
+    addVar(hashtable,"foo",6);
+    addVar(hashtable,"bar",7);
+    addVar(hashtable,"x",12);
+    printf("%f\n",getVar(hashtable,"x"));
+    printf("%f\n",getVar(hashtable,"y"));
+    printf("%f\n",getVar(hashtable,"a"));
+    printf("%f\n",getVar(hashtable,"b"));
+    printf("%f\n",getVar(hashtable,"temp"));
+    printf("%f\n",getVar(hashtable,"foo"));
+    printf("%f\n",getVar(hashtable,"bar"));
+    */
+    for (i=0;i<1000;i++){
+	;
+	//printf("%f\n",hashtable[i].value);
+    }
+    eval_stmt(tree,hashtable);
     return 0;
 }
