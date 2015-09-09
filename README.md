@@ -16,5 +16,3 @@ gcc parser.tab.c lex.yy.c
 Finally, run the program with a sloth file as it's argument. For example:
 
 ./a.out fact.sl
-
-Note: this parser is unfinished, as of now, it only produces a parse tree.
