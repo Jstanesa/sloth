@@ -9,10 +9,10 @@ Download and install the latest version of Bison from https://www.gnu.org/softwa
 
 Run the following commands:
 
-flex sloth.lex
-bison parser.y
-gcc parser.tab.c lex.yy.c
+    flex sloth.lex
+    bison parser.y
+    gcc parser.tab.c lex.yy.c
 
 Finally, run the program with a sloth file as it's argument. For example:
 
-./a.out fact.sl
+    ./a.out fact.sl
